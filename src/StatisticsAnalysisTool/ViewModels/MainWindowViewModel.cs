@@ -134,6 +134,7 @@ public class MainWindowViewModel : BaseViewModel
     private bool _isCloseButtonActive;
     private Visibility _loadIconVisibility = Visibility.Collapsed;
     private ClusterTrackingViewModel _clusterTrackingViewModel;
+    private EntityTrackingViewModel _entityTrackingViewModel;
 
     public MainWindowViewModel()
     {
@@ -141,12 +142,13 @@ public class MainWindowViewModel : BaseViewModel
         SetUiElements();
         Translation = new MainWindowTranslation();
         
-        // Initialize ClusterTrackingViewModel with event bus
+        // Initialize tracking view models with event bus
         var eventBus = ServiceLocator.Resolve<IEventBus>();
         _clusterTrackingViewModel = new ClusterTrackingViewModel(eventBus, UserTrackingBindings);
+        _entityTrackingViewModel = new EntityTrackingViewModel(eventBus);
         
         // Wire up the cluster tracking for backward compatibility
-        _clusterTrackingViewModel.EnteredClusters.CollectionChanged += (s, e) =>
+        _clusterTrackingViewModel.EnteredClusters.CollectionChanged += (_, e) =>
         {
             // Sync to the old EnteredCluster property for backward compatibility
             if (e.NewItems != null)
@@ -160,6 +162,22 @@ public class MainWindowViewModel : BaseViewModel
                 }
             }
         };
+        
+        // Wire up the entity tracking for backward compatibility
+        _entityTrackingViewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(_entityTrackingViewModel.PartyMemberNumber))
+            {
+                PartyMemberNumber = _entityTrackingViewModel.PartyMemberNumber;
+            }
+        };
+    }
+
+    public void WireUpEntityController(EntityController entityController)
+    {
+        // Sync party member state from EntityController to ViewModel
+        // This creates a two-way sync between the controller state and the view state
+        PartyMemberCircles = entityController.State.PartyMemberCircles;
     }
 
     public void SetUiElements()

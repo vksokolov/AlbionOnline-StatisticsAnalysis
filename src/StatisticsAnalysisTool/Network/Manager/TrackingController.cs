@@ -64,7 +64,7 @@ public class TrackingController : ITrackingController
         _eventBus = ServiceLocator.Resolve<IEventBus>();
         
         ClusterController = new ClusterController(this, _eventBus);
-        EntityController = new EntityController(this, mainWindowViewModel);
+        EntityController = new EntityController(this, _eventBus);
         DungeonController = new DungeonController(this, mainWindowViewModel);
         CombatController = new CombatController(this, mainWindowViewModel);
         LootController = new LootController(this, mainWindowViewModel);
