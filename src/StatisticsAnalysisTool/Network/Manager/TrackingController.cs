@@ -3,6 +3,7 @@ using StatisticsAnalysisTool.Cluster;
 using StatisticsAnalysisTool.Common;
 using StatisticsAnalysisTool.Common.UserSettings;
 using StatisticsAnalysisTool.Core;
+using StatisticsAnalysisTool.Core.EventBus;
 using StatisticsAnalysisTool.Dungeon;
 using StatisticsAnalysisTool.EstimatedMarketValue;
 using StatisticsAnalysisTool.EventLogging;
@@ -38,6 +39,7 @@ public class TrackingController : ITrackingController
 
     private NetworkManager _networkManager;
     private readonly MainWindowViewModel _mainWindowViewModel;
+    private readonly IEventBus _eventBus;
 
     public readonly LiveStatsTracker LiveStatsTracker;
     public readonly CombatController CombatController;
@@ -59,7 +61,9 @@ public class TrackingController : ITrackingController
     public TrackingController(MainWindowViewModel mainWindowViewModel)
     {
         _mainWindowViewModel = mainWindowViewModel;
-        ClusterController = new ClusterController(this, mainWindowViewModel);
+        _eventBus = ServiceLocator.Resolve<IEventBus>();
+        
+        ClusterController = new ClusterController(this, _eventBus);
         EntityController = new EntityController(this, mainWindowViewModel);
         DungeonController = new DungeonController(this, mainWindowViewModel);
         CombatController = new CombatController(this, mainWindowViewModel);

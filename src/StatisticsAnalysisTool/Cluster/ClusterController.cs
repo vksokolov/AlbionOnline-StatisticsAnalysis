@@ -1,27 +1,35 @@
 using StatisticsAnalysisTool.Common;
+using StatisticsAnalysisTool.Core.EventBus;
+using StatisticsAnalysisTool.Core.Events;
+using StatisticsAnalysisTool.Core.State;
 using StatisticsAnalysisTool.Enumerations;
 using StatisticsAnalysisTool.GameFileData;
 using StatisticsAnalysisTool.Network.Manager;
-using StatisticsAnalysisTool.ViewModels;
 using System;
 using System.Diagnostics;
-using System.Windows;
 
 namespace StatisticsAnalysisTool.Cluster;
 
 public sealed class ClusterController
 {
-    private const int MaxEnteredCluster = 500;
-
     private readonly TrackingController _trackingController;
-    private readonly MainWindowViewModel _mainWindowViewModel;
+    private readonly IEventBus _eventBus;
 
-    public static ClusterInfo CurrentCluster { get; } = new();
+    public ClusterState State { get; } = new();
+    
+    /// <summary>
+    /// Static accessor for backward compatibility - will be removed in future
+    /// </summary>
+    [Obsolete("Use State.CurrentCluster instead")]
+    public static ClusterInfo CurrentCluster => _instance?.State.CurrentCluster ?? new ClusterInfo();
+    
+    private static ClusterController _instance;
 
-    public ClusterController(TrackingController trackingController, MainWindowViewModel mainWindowViewModel)
+    public ClusterController(TrackingController trackingController, IEventBus eventBus)
     {
         _trackingController = trackingController;
-        _mainWindowViewModel = mainWindowViewModel;
+        _eventBus = eventBus;
+        _instance = this;
 
         CreateRandomClusterInfosForTracking(0);
     }
@@ -30,7 +38,6 @@ public sealed class ClusterController
     {
         OnChangeCluster += UpdateClusterTracking;
         OnChangeCluster += SetAndResetValues;
-        OnChangeCluster += UpdateUserInfoUi;
         OnChangeCluster += SaveUserData;
     }
 
@@ -38,7 +45,6 @@ public sealed class ClusterController
     {
         OnChangeCluster -= UpdateClusterTracking;
         OnChangeCluster -= SetAndResetValues;
-        OnChangeCluster -= UpdateUserInfoUi;
         OnChangeCluster -= SaveUserData;
     }
 
@@ -46,27 +52,29 @@ public sealed class ClusterController
 
     public void ChangeClusterInformation(MapType mapType, Guid? mapGuid, string clusterIndex, string instanceName, string worldMapDataType, byte[] dungeonInformation, string mainClusterIndex, Tier mistsDungeonTier)
     {
-        CurrentCluster.ClusterInfoFullyAvailable = false;
-        CurrentCluster.SetClusterInfo(mapType, mapGuid, clusterIndex, instanceName, worldMapDataType, dungeonInformation, mainClusterIndex, mistsDungeonTier);
+        State.CurrentCluster.ClusterInfoFullyAvailable = false;
+        State.CurrentCluster.SetClusterInfo(mapType, mapGuid, clusterIndex, instanceName, worldMapDataType, dungeonInformation, mainClusterIndex, mistsDungeonTier);
     }
 
     public void SetJoinClusterInformation(string index, string mainClusterIndex, Guid? mapGuid)
     {
-        CurrentCluster.SetJoinClusterInfo(index, mainClusterIndex, mapGuid);
-        CurrentCluster.ClusterInfoFullyAvailable = true;
+        State.CurrentCluster.SetJoinClusterInfo(index, mainClusterIndex, mapGuid);
+        State.CurrentCluster.ClusterInfoFullyAvailable = true;
 
         if (_trackingController.IsTrackingAllowedByMainCharacter())
         {
-            OnChangeCluster?.Invoke(CurrentCluster);
+            OnChangeCluster?.Invoke(State.CurrentCluster);
+            
+            // Publish event for UI layer
+            _eventBus.Publish(new ClusterChangedEvent(State.CurrentCluster, DateTime.UtcNow));
         }
 
-        Debug.Print($"[StateHandler] Changed cluster to: Index: '{CurrentCluster.Index}' UniqueName: '{CurrentCluster.UniqueName}' ClusterType: '{CurrentCluster.ClusterMode}' MapType: '{CurrentCluster.MapType}'");
+        Debug.Print($"[StateHandler] Changed cluster to: Index: '{State.CurrentCluster.Index}' UniqueName: '{State.CurrentCluster.UniqueName}' ClusterType: '{State.CurrentCluster.ClusterMode}' MapType: '{State.CurrentCluster.MapType}'");
     }
 
     public void SetAndResetValues(ClusterInfo currentCluster)
     {
         _trackingController.TradeController.ResetCraftingBuildingInfo();
-        _mainWindowViewModel.DamageMeterBindings.GetSnapshot(_mainWindowViewModel.DamageMeterBindings.IsSnapshotAfterMapChangeActive);
         _trackingController.CombatController.ResetDamageMeterByClusterChange();
         _trackingController.VaultController.ResetDiscoveredItems();
         _trackingController.VaultController.ResetInternalVaultContainer();
@@ -96,36 +104,27 @@ public sealed class ClusterController
 
     #region Cluster history
 
-    private async void UpdateClusterTracking(ClusterInfo currentCluster)
+    private void UpdateClusterTracking(ClusterInfo currentCluster)
     {
-        await Application.Current.Dispatcher.InvokeAsync(() =>
-        {
-            var newCluster = new ClusterInfo(currentCluster);
-            _mainWindowViewModel.EnteredCluster.Insert(0, newCluster);
-            RemovesClusterIfMoreThanLimit();
-        });
+        var newCluster = new ClusterInfo(currentCluster);
+        State.ClusterHistory.Insert(0, newCluster);
+        RemovesClusterIfMoreThanLimit();
+        
+        // Publish event for UI updates
+        _eventBus.Publish(new ClusterHistoryUpdatedEvent(newCluster, DateTime.UtcNow));
     }
 
     private void RemovesClusterIfMoreThanLimit()
     {
-        if (_mainWindowViewModel?.EnteredCluster?.Count > MaxEnteredCluster)
+        if (State.ClusterHistory.Count > State.MaxHistorySize)
         {
-            _mainWindowViewModel?.EnteredCluster?.RemoveAt(_mainWindowViewModel.EnteredCluster.Count - 1);
+            State.ClusterHistory.RemoveAt(State.ClusterHistory.Count - 1);
         }
     }
 
     #endregion
 
-    #region Ui
 
-    public void UpdateUserInfoUi(ClusterInfo currentCluster)
-    {
-        _mainWindowViewModel.UserTrackingBindings.CurrentMapInfoBinding.Tier = currentCluster.TierString;
-        _mainWindowViewModel.UserTrackingBindings.CurrentMapInfoBinding.ClusterMode = currentCluster.ClusterMode;
-        _mainWindowViewModel.UserTrackingBindings.CurrentMapInfoBinding.ComposingMapInfoString(currentCluster);
-    }
-
-    #endregion
 
     #region Save UserData
 

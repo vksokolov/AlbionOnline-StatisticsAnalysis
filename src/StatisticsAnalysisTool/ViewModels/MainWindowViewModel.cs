@@ -7,6 +7,8 @@ using StatisticsAnalysisTool.Alert;
 using StatisticsAnalysisTool.Cluster;
 using StatisticsAnalysisTool.Common;
 using StatisticsAnalysisTool.Common.UserSettings;
+using StatisticsAnalysisTool.Core.EventBus;
+using StatisticsAnalysisTool.Core.ViewModels;
 using StatisticsAnalysisTool.DamageMeter;
 using StatisticsAnalysisTool.Dungeon;
 using StatisticsAnalysisTool.Enumerations;
@@ -131,12 +133,33 @@ public class MainWindowViewModel : BaseViewModel
     private bool _isDataLoaded;
     private bool _isCloseButtonActive;
     private Visibility _loadIconVisibility = Visibility.Collapsed;
+    private ClusterTrackingViewModel _clusterTrackingViewModel;
 
     public MainWindowViewModel()
     {
         UpgradeSettings();
         SetUiElements();
         Translation = new MainWindowTranslation();
+        
+        // Initialize ClusterTrackingViewModel with event bus
+        var eventBus = ServiceLocator.Resolve<IEventBus>();
+        _clusterTrackingViewModel = new ClusterTrackingViewModel(eventBus, UserTrackingBindings);
+        
+        // Wire up the cluster tracking for backward compatibility
+        _clusterTrackingViewModel.EnteredClusters.CollectionChanged += (s, e) =>
+        {
+            // Sync to the old EnteredCluster property for backward compatibility
+            if (e.NewItems != null)
+            {
+                foreach (ClusterInfo item in e.NewItems)
+                {
+                    if (!EnteredCluster.Contains(item))
+                    {
+                        EnteredCluster.Insert(0, item);
+                    }
+                }
+            }
+        };
     }
 
     public void SetUiElements()
