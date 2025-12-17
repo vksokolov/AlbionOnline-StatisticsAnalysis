@@ -135,6 +135,7 @@ public class MainWindowViewModel : BaseViewModel
     private Visibility _loadIconVisibility = Visibility.Collapsed;
     private ClusterTrackingViewModel _clusterTrackingViewModel;
     private EntityTrackingViewModel _entityTrackingViewModel;
+    private DungeonTrackingViewModel _dungeonTrackingViewModel;
 
     public MainWindowViewModel()
     {
@@ -146,6 +147,7 @@ public class MainWindowViewModel : BaseViewModel
         var eventBus = ServiceLocator.Resolve<IEventBus>();
         _clusterTrackingViewModel = new ClusterTrackingViewModel(eventBus, UserTrackingBindings);
         _entityTrackingViewModel = new EntityTrackingViewModel(eventBus);
+        _dungeonTrackingViewModel = new DungeonTrackingViewModel(eventBus);
         
         // Wire up the cluster tracking for backward compatibility
         _clusterTrackingViewModel.EnteredClusters.CollectionChanged += (_, e) =>
@@ -171,6 +173,15 @@ public class MainWindowViewModel : BaseViewModel
                 PartyMemberNumber = _entityTrackingViewModel.PartyMemberNumber;
             }
         };
+        
+        // Wire up the dungeon tracking for backward compatibility
+        _dungeonTrackingViewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(_dungeonTrackingViewModel.SaveTimerVisibility))
+            {
+                // Sync timer visibility if needed
+            }
+        };
     }
 
     public void WireUpEntityController(EntityController entityController)
@@ -178,6 +189,13 @@ public class MainWindowViewModel : BaseViewModel
         // Sync party member state from EntityController to ViewModel
         // This creates a two-way sync between the controller state and the view state
         PartyMemberCircles = entityController.State.PartyMemberCircles;
+    }
+
+    public void WireUpDungeonController(DungeonController dungeonController)
+    {
+        // Sync dungeon collection from DungeonController State to ViewModel
+        // The UI binds to DungeonBindings.Dungeons, so we share the collection
+        DungeonBindings.Dungeons = dungeonController.State.Dungeons;
     }
 
     public void SetUiElements()

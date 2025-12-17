@@ -129,6 +129,9 @@ public partial class App
         
         // Wire up entity controller events to view model
         _mainWindowViewModel.WireUpEntityController(_trackingController.EntityController);
+        
+        // Wire up dungeon controller events to view model
+        _mainWindowViewModel.WireUpDungeonController(_trackingController.DungeonController);
     }
 
     private static void CurrentDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)
