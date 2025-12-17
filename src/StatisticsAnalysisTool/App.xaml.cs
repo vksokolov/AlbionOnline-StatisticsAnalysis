@@ -116,6 +116,10 @@ public partial class App
 
         var satNotifications = new SatNotificationManager(new NotificationManager(Current.Dispatcher));
         ServiceLocator.Register<SatNotificationManager>(satNotifications);
+        
+        // Register event bus for decoupling services from UI
+        var eventBus = new Core.EventBus.EventBus();
+        ServiceLocator.Register<Core.EventBus.IEventBus>(eventBus);
     }
 
     private void RegisterServicesLate()

@@ -1,6 +1,8 @@
 ﻿using FontAwesome5;
 using StatisticsAnalysisTool.Common;
 using StatisticsAnalysisTool.Common.UserSettings;
+using StatisticsAnalysisTool.Core.EventBus;
+using StatisticsAnalysisTool.Core.Events;
 using StatisticsAnalysisTool.Localization;
 using StatisticsAnalysisTool.Properties;
 using StatisticsAnalysisTool.ViewModels;
@@ -16,7 +18,7 @@ using System.Windows.Media;
 
 namespace StatisticsAnalysisTool.DamageMeter;
 
-public class DamageMeterBindings : BaseViewModel, IAsyncInitialization
+public class DamageMeterBindings : BaseViewModel, IAsyncInitialization, IDisposable
 {
     private List<DamageMeterSortStruct> _damageMeterSort = new();
     private DamageMeterSortStruct _damageMeterSortSelection;
@@ -33,6 +35,7 @@ public class DamageMeterBindings : BaseViewModel, IAsyncInitialization
     private bool _isDamageMeterResetBeforeCombatActive;
     private bool _shortDamageMeterToClipboard;
     private bool _onlyDamageToPlayersCounts;
+    private IDisposable _clusterChangedSubscription;
     public Task Initialization { get; init; }
 
     public DamageMeterBindings()
@@ -91,7 +94,24 @@ public class DamageMeterBindings : BaseViewModel, IAsyncInitialization
         IsDamageMeterResetBeforeCombatActive = SettingsController.CurrentSettings.IsDamageMeterResetBeforeCombatActive;
         ShortDamageMeterToClipboard = SettingsController.CurrentSettings.ShortDamageMeterToClipboard;
 
+        // Subscribe to cluster changed events for automatic snapshots
+        var eventBus = ServiceLocator.Resolve<IEventBus>();
+        if (eventBus != null)
+        {
+            _clusterChangedSubscription = eventBus.Subscribe<ClusterChangedEvent>(OnClusterChanged);
+        }
+
         Initialization = LoadLocalFileAsync();
+    }
+    
+    private void OnClusterChanged(ClusterChangedEvent evt)
+    {
+        GetSnapshot(IsSnapshotAfterMapChangeActive);
+    }
+    
+    public void Dispose()
+    {
+        _clusterChangedSubscription?.Dispose();
     }
 
     #region Generally
