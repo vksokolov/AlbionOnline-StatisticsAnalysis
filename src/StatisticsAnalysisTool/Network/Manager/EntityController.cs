@@ -1,10 +1,12 @@
 ﻿using Serilog;
 using StatisticsAnalysisTool.Common;
+using StatisticsAnalysisTool.Core.EventBus;
+using StatisticsAnalysisTool.Core.Events;
+using StatisticsAnalysisTool.Core.State;
 using StatisticsAnalysisTool.Enumerations;
 using StatisticsAnalysisTool.Models;
 using StatisticsAnalysisTool.Models.NetworkModel;
 using StatisticsAnalysisTool.Network.Time;
-using StatisticsAnalysisTool.ViewModels;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -20,20 +22,21 @@ namespace StatisticsAnalysisTool.Network.Manager;
 public class EntityController
 {
     private readonly ConcurrentDictionary<Guid, PlayerGameObject> _knownEntities = new();
-    private readonly MainWindowViewModel _mainWindowViewModel;
     private readonly ObservableCollection<EquipmentItemInternal> _newEquipmentItems = new();
     private readonly ObservableCollection<SpellEffect> _spellEffects = new();
     private readonly ConcurrentDictionary<long, CharacterEquipmentData> _tempCharacterEquipmentData = new();
     private double _lastLocalEntityGuildTaxInPercent;
     private double _lastLocalEntityClusterTaxInPercent;
     private readonly TrackingController _trackingController;
+    private readonly IEventBus _eventBus;
 
     public LocalUserData LocalUserData { get; init; } = new();
+    public EntityState State { get; } = new();
 
-    public EntityController(TrackingController trackingController, MainWindowViewModel mainWindowViewModel)
+    public EntityController(TrackingController trackingController, IEventBus eventBus)
     {
         _trackingController = trackingController;
-        _mainWindowViewModel = mainWindowViewModel;
+        _eventBus = eventBus;
     }
 
     #region Entities
@@ -267,12 +270,12 @@ public class EntityController
     {
         await Application.Current.Dispatcher.InvokeAsync(() =>
         {
-            _mainWindowViewModel.PartyMemberCircles.Clear();
+            State.PartyMemberCircles.Clear();
 
             var localEntity = GetLocalEntity();
             if (localEntity != null)
             {
-                _mainWindowViewModel.PartyMemberCircles.Add(new PartyMemberCircle
+                State.PartyMemberCircles.Add(new PartyMemberCircle
                 {
                     Name = localEntity.Value.Value?.Name,
                     UserGuid = localEntity.Value.Key
@@ -281,14 +284,17 @@ public class EntityController
 
             foreach (var member in _knownEntities.Where(x => x.Value.IsInParty && x.Key != localEntity?.Value?.UserGuid).ToList())
             {
-                _mainWindowViewModel.PartyMemberCircles.Add(new PartyMemberCircle
+                State.PartyMemberCircles.Add(new PartyMemberCircle
                 {
                     Name = member.Value.Name,
                     UserGuid = member.Key
                 });
             }
 
-            _mainWindowViewModel.PartyMemberNumber = _knownEntities.Count(x => x.Value.IsInParty);
+            State.PartyMemberNumber = _knownEntities.Count(x => x.Value.IsInParty);
+            
+            // Publish event for UI layer
+            _eventBus.Publish(new PartyMembersUpdatedEvent(State.PartyMemberNumber, DateTime.UtcNow));
         });
     }
 

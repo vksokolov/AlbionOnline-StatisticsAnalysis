@@ -126,6 +126,9 @@ public partial class App
     {
         _trackingController = new TrackingController(_mainWindowViewModel);
         ServiceLocator.Register<TrackingController>(_trackingController);
+        
+        // Wire up entity controller events to view model
+        _mainWindowViewModel.WireUpEntityController(_trackingController.EntityController);
     }
 
     private static void CurrentDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)
