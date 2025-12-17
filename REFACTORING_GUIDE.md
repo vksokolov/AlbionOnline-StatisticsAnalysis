@@ -535,9 +535,9 @@ private void OnSomethingHappened(SomethingHappenedEvent evt)
 ### Fully Refactored
 1. **ClusterController** → `ClusterState`, `ClusterEvents`, `ClusterTrackingViewModel`
 2. **EntityController** → `EntityState`, `EntityEvents`, `EntityTrackingViewModel`
+3. **DungeonController** → `DungeonState`, `DungeonEvents`, `DungeonTrackingViewModel`
 
 ### Not Yet Refactored
-- DungeonController
 - CombatController
 - LootController
 - StatisticController
