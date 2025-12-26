@@ -1,13 +1,14 @@
 using Serilog;
 using StatisticsAnalysisTool.Common;
 using StatisticsAnalysisTool.Common.UserSettings;
+using StatisticsAnalysisTool.Core.EventBus;
+using StatisticsAnalysisTool.Core.Events;
+using StatisticsAnalysisTool.Core.State;
 using StatisticsAnalysisTool.DamageMeter;
 using StatisticsAnalysisTool.Enumerations;
 using StatisticsAnalysisTool.Models.NetworkModel;
 using StatisticsAnalysisTool.Properties;
-using StatisticsAnalysisTool.ViewModels;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
@@ -20,14 +21,15 @@ namespace StatisticsAnalysisTool.Network.Manager;
 
 public class CombatController
 {
-    private readonly MainWindowViewModel _mainWindowViewModel;
     private readonly TrackingController _trackingController;
-    private bool _combatModeWasCombatOver;
+    private readonly IEventBus _eventBus;
 
-    public CombatController(TrackingController trackingController, MainWindowViewModel mainWindowViewModel)
+    public CombatState State { get; } = new();
+
+    public CombatController(TrackingController trackingController, IEventBus eventBus)
     {
         _trackingController = trackingController;
-        _mainWindowViewModel = mainWindowViewModel;
+        _eventBus = eventBus;
 
         OnChangeCombatMode += AddCombatTime;
         OnChangeCombatMode += SetLastCombatMode;
@@ -51,12 +53,14 @@ public class CombatController
             return Task.CompletedTask;
         }
 
+        _eventBus.Publish(new DamageDealtEvent(affectedId, causerId, healthChange, newHealthValue, causingSpellIndex, DateTime.UtcNow));
+
         var causerGameObject = _trackingController.EntityController?.GetEntity(causerId);
         var causerGameObjectValue = causerGameObject?.Value;
 
         var affectedGameObject = _trackingController.EntityController?.GetEntity(affectedId);
 
-        if (_mainWindowViewModel.DamageMeterBindings.OnlyDamageToPlayersCounts && affectedGameObject?.Value is not { ObjectType: GameObjectType.Player })
+        if (State.OnlyDamageToPlayersCounts && affectedGameObject?.Value is not { ObjectType: GameObjectType.Player })
         {
             return Task.CompletedTask;
         }
@@ -100,7 +104,7 @@ public class CombatController
 
         causerGameObjectValue.CombatStart ??= DateTime.UtcNow;
 
-        OnDamageUpdate?.Invoke(_mainWindowViewModel?.DamageMeterBindings?.DamageMeter, _trackingController.EntityController.GetAllEntitiesWithDamageOrHealAndInParty());
+        OnDamageUpdate?.Invoke(State.DamageMeter, _trackingController.EntityController.GetAllEntitiesWithDamageOrHealAndInParty());
         return Task.CompletedTask;
     }
 
@@ -111,6 +115,8 @@ public class CombatController
         {
             return Task.CompletedTask;
         }
+
+        _eventBus.Publish(new DamageTakenEvent(affectedId, causerId, healthChange, newHealthValue, causingSpellIndex, DateTime.UtcNow));
 
         var gameObject = _trackingController?.EntityController?.GetEntity(affectedId);
         var gameObjectValue = gameObject?.Value;
@@ -134,8 +140,6 @@ public class CombatController
         return Task.CompletedTask;
     }
 
-    private static bool _isUiUpdateActive;
-
     public async void UpdateDamageMeterUiAsync(ObservableCollection<DamageMeterFragment> damageMeter, List<KeyValuePair<Guid, PlayerGameObject>> entities)
     {
         if (!IsUiUpdateAllowed())
@@ -143,7 +147,7 @@ public class CombatController
             return;
         }
 
-        _isUiUpdateActive = true;
+        State.IsUiUpdateActive = true;
 
         var currentTotalDamage = entities.GetCurrentTotalDamage();
         var currentTotalHeal = entities.GetCurrentTotalHeal();
@@ -167,12 +171,11 @@ public class CombatController
             {
                 await AddDamageMeterFragmentAsync(damageMeter, healthChangeObject, entities, currentTotalDamage, currentTotalHeal, currentTotalTakenDamage).ConfigureAwait(true);
             }
-
-            Application.Current.Dispatcher.Invoke(() => _mainWindowViewModel.DamageMeterBindings?.SetDamageMeterSort());
         }
 
-        await RemoveDuplicatesAsync(_mainWindowViewModel?.DamageMeterBindings?.DamageMeter);
-        _isUiUpdateActive = false;
+        await RemoveDuplicatesAsync(State.DamageMeter);
+        State.IsUiUpdateActive = false;
+        _eventBus.Publish(new DamageMeterUpdateEvent(State.DamageMeter.ToList(), DateTime.UtcNow));
     }
 
     private static async Task UpdateDamageMeterFragmentAsync(DamageMeterFragment fragment, KeyValuePair<Guid, PlayerGameObject> healthChangeObject,
@@ -323,18 +326,18 @@ public class CombatController
 
     public void ResetDamageMeterByClusterChange()
     {
-        if (!_mainWindowViewModel.DamageMeterBindings?.IsDamageMeterResetByMapChangeActive ?? false)
+        if (!State.IsDamageMeterResetByMapChangeActive)
         {
             return;
         }
 
         ResetDamageMeter();
-        LastPlayersHealth.Clear();
+        State.LastPlayersHealth.Clear();
     }
 
     public void ResetDamageMeterBeforeCombatStart(long objectId, bool inActiveCombat, bool inPassiveCombat)
     {
-        if (!_combatModeWasCombatOver)
+        if (!State.CombatModeWasCombatOver)
         {
             return;
         }
@@ -344,7 +347,7 @@ public class CombatController
             return;
         }
 
-        if (!_mainWindowViewModel.DamageMeterBindings?.IsDamageMeterResetBeforeCombatActive ?? false)
+        if (!State.IsDamageMeterResetBeforeCombatActive)
         {
             return;
         }
@@ -355,9 +358,9 @@ public class CombatController
         }
 
         ResetDamageMeter();
-        LastPlayersHealth.Clear();
+        State.LastPlayersHealth.Clear();
 
-        _combatModeWasCombatOver = false;
+        State.CombatModeWasCombatOver = false;
     }
 
     private void SetLastCombatMode(long objectId, bool inActiveCombat, bool inPassiveCombat)
@@ -369,7 +372,7 @@ public class CombatController
 
         if (!inActiveCombat && !inPassiveCombat)
         {
-            _combatModeWasCombatOver = true;
+            State.CombatModeWasCombatOver = true;
         }
     }
 
@@ -385,16 +388,16 @@ public class CombatController
 
         Application.Current?.Dispatcher?.InvokeAsync(() =>
         {
-            _mainWindowViewModel?.DamageMeterBindings?.DamageMeter?.Clear();
+            State.DamageMeter?.Clear();
         });
-    }
 
-    public ConcurrentDictionary<Guid, double> LastPlayersHealth = new();
+        _eventBus.Publish(new DamageMeterResetEvent(DateTime.UtcNow));
+    }
 
     public bool IsMaxHealthReached(long objectId, double newHealthValue)
     {
         var gameObject = _trackingController?.EntityController?.GetEntity(objectId);
-        var playerHealth = LastPlayersHealth?.ToArray().FirstOrDefault(x => x.Key == gameObject?.Value?.UserGuid);
+        var playerHealth = State.LastPlayersHealth?.ToArray().FirstOrDefault(x => x.Key == gameObject?.Value?.UserGuid);
         if (playerHealth?.Value.CompareTo(newHealthValue) == 0)
         {
             return true;
@@ -411,15 +414,15 @@ public class CombatController
             return;
         }
 
-        if (LastPlayersHealth.ContainsKey(notNullGuid))
+        if (State.LastPlayersHealth.ContainsKey(notNullGuid))
         {
-            LastPlayersHealth[notNullGuid] = value;
+            State.LastPlayersHealth[notNullGuid] = value;
         }
         else
         {
             try
             {
-                LastPlayersHealth.TryAdd(notNullGuid, value);
+                State.LastPlayersHealth.TryAdd(notNullGuid, value);
             }
             catch (Exception e)
             {
@@ -430,15 +433,13 @@ public class CombatController
 
     private static HealthChangeType GetHealthChangeType(double healthChange) => healthChange <= 0 ? HealthChangeType.Damage : HealthChangeType.Heal;
 
-    private DateTime _lastDamageUiUpdate;
-
     private bool IsUiUpdateAllowed(int waitTimeInSeconds = 1)
     {
         var currentDateTime = DateTime.UtcNow;
-        var difference = currentDateTime.Subtract(_lastDamageUiUpdate);
-        if (difference.Seconds >= waitTimeInSeconds && !_isUiUpdateActive)
+        var difference = currentDateTime.Subtract(State.LastDamageUiUpdate);
+        if (difference.Seconds >= waitTimeInSeconds && !State.IsUiUpdateActive)
         {
-            _lastDamageUiUpdate = currentDateTime;
+            State.LastDamageUiUpdate = currentDateTime;
             return true;
         }
 
@@ -561,6 +562,7 @@ public class CombatController
     public void UpdateCombatMode(long objectId, bool inActiveCombat, bool inPassiveCombat)
     {
         OnChangeCombatMode?.Invoke(objectId, inActiveCombat, inPassiveCombat);
+        _eventBus.Publish(new CombatModeChangedEvent(objectId, inActiveCombat, inPassiveCombat, DateTime.UtcNow));
     }
 
     private void AddCombatTime(long objectId, bool inActiveCombat, bool inPassiveCombat)
@@ -673,17 +675,24 @@ public class CombatController
     {
         var dto = await FileController.LoadAsync<List<DamageMeterSnapshotDto>>(
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, Settings.Default.UserDataDirectoryName, Settings.Default.DamageMeterSnapshotsFileName));
-        var damageMeterSnapshot = dto.Select(SnapshotMapping.Mapping);
+        var damageMeterSnapshot = dto.Select(SnapshotMapping.Mapping).ToList();
 
-        _mainWindowViewModel.DamageMeterBindings.DamageMeterSnapshots = damageMeterSnapshot.ToList();
+        State.DamageMeterSnapshots.Clear();
+        foreach (var snapshot in damageMeterSnapshot)
+        {
+            State.DamageMeterSnapshots.Add(snapshot);
+        }
+
+        _eventBus.Publish(new DamageMeterSnapshotsLoadedEvent(State.DamageMeterSnapshots.Count, DateTime.UtcNow));
     }
 
     public async Task SaveInFileAsync()
     {
         DirectoryController.CreateDirectoryWhenNotExists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, Settings.Default.UserDataDirectoryName));
-        await FileController.SaveAsync(_mainWindowViewModel.DamageMeterBindings?.DamageMeterSnapshots?.Select(SnapshotMapping.Mapping),
+        await FileController.SaveAsync(State.DamageMeterSnapshots?.Select(SnapshotMapping.Mapping),
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, Settings.Default.UserDataDirectoryName, Settings.Default.DamageMeterSnapshotsFileName));
         Log.Information("Damage Meter snapshots saved");
+        _eventBus.Publish(new DamageMeterSnapshotsSavedEvent(State.DamageMeterSnapshots.Count, DateTime.UtcNow));
     }
 
     #endregion

@@ -136,6 +136,7 @@ public class MainWindowViewModel : BaseViewModel
     private ClusterTrackingViewModel _clusterTrackingViewModel;
     private EntityTrackingViewModel _entityTrackingViewModel;
     private DungeonTrackingViewModel _dungeonTrackingViewModel;
+    private CombatTrackingViewModel _combatTrackingViewModel;
 
     public MainWindowViewModel()
     {
@@ -148,6 +149,7 @@ public class MainWindowViewModel : BaseViewModel
         _clusterTrackingViewModel = new ClusterTrackingViewModel(eventBus, UserTrackingBindings);
         _entityTrackingViewModel = new EntityTrackingViewModel(eventBus);
         _dungeonTrackingViewModel = new DungeonTrackingViewModel(eventBus);
+        _combatTrackingViewModel = new CombatTrackingViewModel(eventBus);
         
         // Wire up the cluster tracking for backward compatibility
         _clusterTrackingViewModel.EnteredClusters.CollectionChanged += (_, e) =>
@@ -196,6 +198,36 @@ public class MainWindowViewModel : BaseViewModel
         // Sync dungeon collection from DungeonController State to ViewModel
         // The UI binds to DungeonBindings.Dungeons, so we share the collection
         DungeonBindings.Dungeons = dungeonController.State.Dungeons;
+    }
+
+    public void WireUpCombatController(CombatController combatController)
+    {
+        // Sync damage meter collections from CombatController State to ViewModel
+        // The UI binds to DamageMeterBindings, so we share the collections
+        DamageMeterBindings.DamageMeter = combatController.State.DamageMeter;
+        DamageMeterBindings.DamageMeterSnapshots = combatController.State.DamageMeterSnapshots;
+
+        // Sync settings from ViewModel to State (initial values from UI settings)
+        combatController.State.OnlyDamageToPlayersCounts = DamageMeterBindings.OnlyDamageToPlayersCounts;
+        combatController.State.IsDamageMeterResetByMapChangeActive = DamageMeterBindings.IsDamageMeterResetByMapChangeActive;
+        combatController.State.IsDamageMeterResetBeforeCombatActive = DamageMeterBindings.IsDamageMeterResetBeforeCombatActive;
+
+        // Subscribe to property changes to keep State in sync with UI settings
+        DamageMeterBindings.PropertyChanged += (_, e) =>
+        {
+            switch (e.PropertyName)
+            {
+                case nameof(DamageMeterBindings.OnlyDamageToPlayersCounts):
+                    combatController.State.OnlyDamageToPlayersCounts = DamageMeterBindings.OnlyDamageToPlayersCounts;
+                    break;
+                case nameof(DamageMeterBindings.IsDamageMeterResetByMapChangeActive):
+                    combatController.State.IsDamageMeterResetByMapChangeActive = DamageMeterBindings.IsDamageMeterResetByMapChangeActive;
+                    break;
+                case nameof(DamageMeterBindings.IsDamageMeterResetBeforeCombatActive):
+                    combatController.State.IsDamageMeterResetBeforeCombatActive = DamageMeterBindings.IsDamageMeterResetBeforeCombatActive;
+                    break;
+            }
+        };
     }
 
     public void SetUiElements()

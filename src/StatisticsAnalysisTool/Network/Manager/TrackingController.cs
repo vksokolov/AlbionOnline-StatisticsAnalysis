@@ -66,7 +66,7 @@ public class TrackingController : ITrackingController
         ClusterController = new ClusterController(this, _eventBus);
         EntityController = new EntityController(this, _eventBus);
         DungeonController = new DungeonController(this, _eventBus, mainWindowViewModel);
-        CombatController = new CombatController(this, mainWindowViewModel);
+        CombatController = new CombatController(this, _eventBus);
         LootController = new LootController(this, mainWindowViewModel);
         StatisticController = new StatisticController(this, mainWindowViewModel);
         TreasureController = new TreasureController(this, mainWindowViewModel);
