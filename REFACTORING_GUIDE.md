@@ -536,9 +536,10 @@ private void OnSomethingHappened(SomethingHappenedEvent evt)
 1. **ClusterController** → `ClusterState`, `ClusterEvents`, `ClusterTrackingViewModel`
 2. **EntityController** → `EntityState`, `EntityEvents`, `EntityTrackingViewModel`
 3. **DungeonController** → `DungeonState`, `DungeonEvents`, `DungeonTrackingViewModel`
+4. **CombatController** → `CombatState`, `CombatEvents`, `CombatTrackingViewModel`
 
 ### Not Yet Refactored
-- CombatController
+- LootController
 - LootController
 - StatisticController
 - TreasureController
