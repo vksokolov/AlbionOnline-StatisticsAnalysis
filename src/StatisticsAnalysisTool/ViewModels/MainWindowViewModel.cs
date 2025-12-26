@@ -202,10 +202,14 @@ public class MainWindowViewModel : BaseViewModel
 
     public void WireUpCombatController(CombatController combatController)
     {
-        // Sync damage meter collections from CombatController State to ViewModel
-        // The UI binds to DamageMeterBindings, so we share the collections
+        // Sync damage meter collection from CombatController State to ViewModel
+        // The UI binds to DamageMeterBindings.DamageMeter, so we share the collection
         DamageMeterBindings.DamageMeter = combatController.State.DamageMeter;
-        DamageMeterBindings.DamageMeterSnapshots = combatController.State.DamageMeterSnapshots;
+        
+        // Note: DamageMeterSnapshots is not shared because DamageMeterBindings
+        // performs operations that replace the list (e.g., .ToList(), reassignment).
+        // Instead, we sync via the LoadFromFileAsync method which populates both
+        // State.DamageMeterSnapshots and DamageMeterBindings.DamageMeterSnapshots
 
         // Sync settings from ViewModel to State (initial values from UI settings)
         combatController.State.OnlyDamageToPlayersCounts = DamageMeterBindings.OnlyDamageToPlayersCounts;
