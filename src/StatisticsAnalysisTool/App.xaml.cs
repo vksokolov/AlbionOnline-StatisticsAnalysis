@@ -1,4 +1,4 @@
-﻿using Notification.Wpf;
+﻿﻿using Notification.Wpf;
 using Serilog;
 using Serilog.Events;
 using StatisticsAnalysisTool.Backup;
@@ -132,6 +132,9 @@ public partial class App
         
         // Wire up dungeon controller events to view model
         _mainWindowViewModel.WireUpDungeonController(_trackingController.DungeonController);
+        
+        // Wire up combat controller events to view model
+        _mainWindowViewModel.WireUpCombatController(_trackingController.CombatController);
     }
 
     private static void CurrentDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)
